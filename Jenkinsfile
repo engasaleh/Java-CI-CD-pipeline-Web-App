@@ -26,10 +26,9 @@ pipeline {
             steps {
                 withDockerRegistry([credentialsId: 'dockerhub-creds', url: '']) {
                     sh 'docker tag hello-java-app:v1 <your-dockerhub-username>/hello-java-app:v2'
-                    sh 'docker push <your-dockerhub-username>/hello-java-app:latest'
+                    sh 'docker push <your-dockerhub-username>/hello-java-app:v2'
                 }
             }
         }
     }
 }
-
