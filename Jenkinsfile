@@ -50,12 +50,28 @@ pipeline {
             }
         }
 
-        stage('Deploy to KIND') {
+        stage('Deploy to UAT') {
             steps {
+                echo 'Deploying to UAT namespace...'
                 sh '''
-                    echo "Using kubeconfig: $KUBECONFIG"
-                    kubectl apply -f deployment.yaml
-                    kubectl apply -f service.yaml
+                    kubectl apply -f deployment/uat/deployment-uat.yaml
+                    kubectl apply -f deployment/uat/service-uat.yaml
+                '''
+            }
+        }
+
+        stage('Approval to Production') {
+            steps {
+                input message: "Approve deployment to Production?"
+            }
+        }
+
+        stage('Deploy to Production') {
+            steps {
+                echo 'Deploying to Production...'
+                sh '''
+                    kubectl apply -f deployment/production/deployment.yaml
+                    kubectl apply -f deployment/production/service.yaml
                 '''
             }
         }

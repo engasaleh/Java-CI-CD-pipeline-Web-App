@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-java-app-uat
+  namespace: uat
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: web-java-app
+  template:
+    metadata:
+      labels:
+        app: web-java-app
+    spec:
+      containers:
+      - name: web-java-app
+        image: abdullahsaleh2001/web-java-app:v2
+        ports:
+        - containerPort: 8080
+
