@@ -5,8 +5,6 @@ pipeline {
         KUBECONFIG = '/var/lib/jenkins/.kube/config'
         IMAGE_NAME = 'abdullahsaleh2001/web-java-app'
         IMAGE_TAG = "v1.0.${env.BUILD_NUMBER}"
-        UAT_NODEPORT = 31080
-        PROD_NODEPORT = 30080
     }
 
     stages {
@@ -63,13 +61,16 @@ pipeline {
             steps {
                 script {
                     echo "Checking UAT app..."
-                    def response = sh(
-                        script: "curl -s -o /dev/null -w '%{http_code}' http://localhost:${UAT_NODEPORT}",
-                        returnStdout: true
-                    ).trim()
+                    // Start port-forward in background
+                    sh "kubectl port-forward svc/web-java-app-service 31080:8080 -n uat &"
+                    // Wait a few seconds for the port-forward to establish
+                    sleep 5
+                    def response = sh(script: "curl -s -o /dev/null -w '%{http_code}' http://localhost:31080", returnStdout: true).trim()
                     if (response != '200') {
                         error "UAT health check failed! HTTP status: ${response}"
                     }
+                    // Kill all background port-forwards
+                    sh "pkill -f 'kubectl port-forward'"
                 }
             }
         }
@@ -105,13 +106,13 @@ pipeline {
             steps {
                 script {
                     echo "Checking Production app..."
-                    def response = sh(
-                        script: "curl -s -o /dev/null -w '%{http_code}' http://localhost:${PROD_NODEPORT}",
-                        returnStdout: true
-                    ).trim()
+                    sh "kubectl port-forward svc/web-java-app-service 30080:8080 -n default &"
+                    sleep 5
+                    def response = sh(script: "curl -s -o /dev/null -w '%{http_code}' http://localhost:30080", returnStdout: true).trim()
                     if (response != '200') {
                         error "Production health check failed! HTTP status: ${response}"
                     }
+                    sh "pkill -f 'kubectl port-forward'"
                 }
             }
         }
