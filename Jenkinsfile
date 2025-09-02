@@ -1,14 +1,6 @@
 pipeline {
     agent any
 
-    parameters {
-        choice(
-            name: 'TARGET_ENV',
-            choices: ['UAT', 'Production'],
-            description: 'Select the environment to deploy'
-        )
-    }
-
     environment {
         KUBECONFIG = '/var/lib/jenkins/.kube/config'
         IMAGE_NAME = 'abdullahsaleh2001/web-java-app'
@@ -55,61 +47,84 @@ pipeline {
             }
         }
 
-        stage('Approval to Production') {
-            when {
-                expression { params.TARGET_ENV == 'Production' }
-            }
+        stage('Deploy to UAT') {
             steps {
-                input message: "Approve deployment to Production?"
-            }
-        }
-
-        stage('Deploy') {
-            steps {
-                script {
-                    def namespace = params.TARGET_ENV.toLowerCase()
-                    def deploymentName = namespace == 'uat' ? 'web-java-app-uat' : 'web-java-app-deployment'
-                    sh """
-                        kubectl set image deployment/${deploymentName} web-java-app=${IMAGE_NAME}:${IMAGE_TAG} -n ${namespace}
-                        kubectl rollout status deployment/${deploymentName} -n ${namespace}
-                    """
-                }
+                echo 'Deploying to UAT namespace...'
+                sh """
+                    kubectl set image deployment/web-java-app-uat web-java-app=${IMAGE_NAME}:${IMAGE_TAG} -n uat
+                    kubectl rollout status deployment/web-java-app-uat -n uat
+                """
             }
         }
 
-        stage('Health Check') {
+        stage('Health Check UAT') {
             steps {
                 script {
-                    def port = params.TARGET_ENV == 'UAT' ? 31080 : 30080
-                    echo "Checking ${params.TARGET_ENV} app..."
-                    def response = sh(script: "curl -s -o /dev/null -w '%{http_code}' http://localhost:${port}", returnStdout: true).trim()
+                    echo "Checking UAT app..."
+                    def response = sh(script: "curl -s -o /dev/null -w '%{http_code}' http://localhost:31080", returnStdout: true).trim()
                     if (response != '200') {
-                        error "${params.TARGET_ENV} health check failed! HTTP status: ${response}"
+                        error "UAT health check failed! HTTP status: ${response}"
                     }
                 }
             }
         }
 
-        stage('Pod Logs') {
+        stage('UAT Pod Logs') {
+            steps {
+                sh """
+                    echo "Fetching UAT pod logs..."
+                    kubectl logs -l app=web-java-app -n uat --tail=20
+                    kubectl get pods -n uat
+                    kubectl get svc -n uat
+                """
+            }
+        }
+
+        stage('Approval to Production') {
+            steps {
+                input message: "Approve deployment to Production?"
+            }
+        }
+
+        stage('Deploy to Production') {
+            steps {
+                echo 'Deploying to Production...'
+                sh """
+                    kubectl set image deployment/web-java-app-deployment web-java-app=${IMAGE_NAME}:${IMAGE_TAG} -n default
+                    kubectl rollout status deployment/web-java-app-deployment -n default
+                """
+            }
+        }
+
+        stage('Health Check Production') {
             steps {
                 script {
-                    def namespace = params.TARGET_ENV.toLowerCase()
-                    echo "Fetching ${params.TARGET_ENV} pod logs..."
-                    sh """
-                        kubectl logs -l app=web-java-app -n ${namespace} --tail=20
-                        kubectl get pods -n ${namespace}
-                        kubectl get svc -n ${namespace}
-                    """
+                    echo "Checking Production app..."
+                    def response = sh(script: "curl -s -o /dev/null -w '%{http_code}' http://localhost:30080", returnStdout: true).trim()
+                    if (response != '200') {
+                        error "Production health check failed! HTTP status: ${response}"
+                    }
                 }
+            }
+        }
+
+        stage('Production Pod Logs') {
+            steps {
+                sh """
+                    echo "Fetching Production pod logs..."
+                    kubectl logs -l app=web-java-app -n default --tail=20
+                    kubectl get pods -n default
+                    kubectl get svc -n default
+                """
             }
         }
 
         stage('Rollback if Failed') {
             when {
-                expression { currentBuild.result == 'FAILURE' && params.TARGET_ENV == 'Production' }
+                expression { currentBuild.result == 'FAILURE' }
             }
             steps {
-                echo "Rolling back Production to previous stable version..."
+                echo "Rolling back to previous stable version..."
                 sh "kubectl rollout undo deployment/web-java-app-deployment -n default"
             }
         }
@@ -120,14 +135,14 @@ pipeline {
             slackSend(
                 channel: '#devops-alerts',
                 color: 'good',
-                message: "SUCCESS: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' deployed successfully to ${params.TARGET_ENV}."
+                message: "SUCCESS: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' deployed successfully to UAT/Production."
             )
         }
         failure {
             slackSend(
                 channel: '#devops-alerts',
                 color: 'danger',
-                message: "FAILURE: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' failed during deployment to ${params.TARGET_ENV}."
+                message: "FAILURE: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' failed. Check Jenkins logs."
             )
         }
     }
