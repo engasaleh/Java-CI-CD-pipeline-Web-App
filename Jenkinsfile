@@ -1,10 +1,6 @@
 pipeline {
     agent any
 
-    tools {
-        maven 'Maven_3.9.11'   // 👈 must match the name from Manage Jenkins → Tools
-    }
-
     stages {
         stage('Checkout') {
             steps {
@@ -16,9 +12,7 @@ pipeline {
 
         stage('Build') {
             steps {
-                withMaven(maven: 'Maven_3.9.11') {   // 👈 wrap with withMaven
-                    sh 'mvn clean package'
-                }
+                sh 'mvn clean package'
             }
         }
 
