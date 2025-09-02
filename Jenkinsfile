@@ -18,15 +18,15 @@ pipeline {
 
         stage('Docker Build') {
             steps {
-                sh 'docker build -t hello-java-app:v1 .'
+                sh 'sudo docker build -t hello-java-app:v1 .'
             }
         }
 
         stage('Docker Push') {
             steps {
                 withDockerRegistry([credentialsId: 'dockerhub-creds', url: '']) {
-                    sh 'docker tag hello-java-app:v1 <your-dockerhub-username>/hello-java-app:v2'
-                    sh 'docker push <your-dockerhub-username>/hello-java-app:v2'
+                    sh 'sudo docker tag hello-java-app:v1 <your-dockerhub-username>/hello-java-app:v2'
+                    sh 'sudo docker push <your-dockerhub-username>/hello-java-app:v2'
                 }
             }
         }
