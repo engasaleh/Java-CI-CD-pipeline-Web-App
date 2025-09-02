@@ -53,12 +53,12 @@ pipeline {
         stage('Deploy to KIND') {
             steps {
                 sh '''
+                    echo "Using kubeconfig: $KUBECONFIG"
                     kubectl apply -f deployment.yaml
                     kubectl apply -f service.yaml
                 '''
             }
         }
-
     }
 }
 
