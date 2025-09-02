@@ -5,9 +5,7 @@ pipeline {
         stage('Cleanup') {
             steps {
                 echo 'Cleaning up old workspace and Docker images...'
-                // Clean Jenkins workspace
                 deleteDir()
-                // Remove old Docker images if exist
                 sh '''
                     docker rmi -f web-java-app:v1 || true
                     docker rmi -f abdullahsaleh2001/web-java-app:v2 || true
@@ -41,6 +39,15 @@ pipeline {
                     sh 'docker tag web-java-app:v1 abdullahsaleh2001/web-java-app:v2'
                     sh 'docker push abdullahsaleh2001/web-java-app:v2'
                 }
+            }
+        }
+
+        stage('Deploy to KIND') {
+            steps {
+                sh '''
+                    kubectl apply -f deployment.yaml
+                    kubectl apply -f service.yaml
+                '''
             }
         }
     }
