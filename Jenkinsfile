@@ -5,6 +5,8 @@ pipeline {
         KUBECONFIG = '/var/lib/jenkins/.kube/config'
         IMAGE_NAME = 'abdullahsaleh2001/web-java-app'
         IMAGE_TAG = "v1.0.${env.BUILD_NUMBER}"
+        UAT_NODEPORT = 31080
+        PROD_NODEPORT = 30080
     }
 
     stages {
@@ -61,7 +63,10 @@ pipeline {
             steps {
                 script {
                     echo "Checking UAT app..."
-                    def response = sh(script: "curl -s -o /dev/null -w '%{http_code}' http://localhost:31080", returnStdout: true).trim()
+                    def response = sh(
+                        script: "curl -s -o /dev/null -w '%{http_code}' http://localhost:${UAT_NODEPORT}",
+                        returnStdout: true
+                    ).trim()
                     if (response != '200') {
                         error "UAT health check failed! HTTP status: ${response}"
                     }
@@ -100,7 +105,10 @@ pipeline {
             steps {
                 script {
                     echo "Checking Production app..."
-                    def response = sh(script: "curl -s -o /dev/null -w '%{http_code}' http://localhost:30080", returnStdout: true).trim()
+                    def response = sh(
+                        script: "curl -s -o /dev/null -w '%{http_code}' http://localhost:${PROD_NODEPORT}",
+                        returnStdout: true
+                    ).trim()
                     if (response != '200') {
                         error "Production health check failed! HTTP status: ${response}"
                     }
