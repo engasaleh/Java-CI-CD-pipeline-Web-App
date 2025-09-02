@@ -18,15 +18,17 @@ pipeline {
 
         stage('Docker Build') {
             steps {
-                sh 'docker build -t hello-java-app:v1 .'
+                // Build Docker image locally as v1
+                sh 'docker build -t web-java-app:v1 .'
             }
         }
 
         stage('Docker Push') {
             steps {
+                // Push Docker image to Docker Hub as v2
                 withDockerRegistry([credentialsId: 'dockerhub-creds', url: '']) {
-                    sh 'docker tag hello-java-app:v1 abdullahsaleh2001/hello-java-app:v2'
-                    sh 'docker push abdullahsaleh2001/hello-java-app:v2'
+                    sh 'docker tag web-java-app:v1 abdullahsaleh2001/web-java-app:v2'
+                    sh 'docker push abdullahsaleh2001/web-java-app:v2'
                 }
             }
         }
