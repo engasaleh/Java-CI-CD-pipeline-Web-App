@@ -2,6 +2,20 @@ pipeline {
     agent any
 
     stages {
+        stage('Cleanup') {
+            steps {
+                echo "Cleaning workspace and old Docker images..."
+                // تنظيف الـ workspace
+                deleteDir()
+                
+                // إزالة أي Docker image قديم بنفس الاسم
+                sh '''
+                    docker rmi -f web-java-app:v1 || true
+                    docker rmi -f abdullahsaleh2001/web-java-app:v2 || true
+                '''
+            }
+        }
+
         stage('Checkout') {
             steps {
                 git branch: 'main',
@@ -18,14 +32,12 @@ pipeline {
 
         stage('Docker Build') {
             steps {
-                // Build Docker image locally as v1
                 sh 'docker build -t web-java-app:v1 .'
             }
         }
 
         stage('Docker Push') {
             steps {
-                // Push Docker image to Docker Hub as v2
                 withDockerRegistry([credentialsId: 'dockerhub-creds', url: '']) {
                     sh 'docker tag web-java-app:v1 abdullahsaleh2001/web-java-app:v2'
                     sh 'docker push abdullahsaleh2001/web-java-app:v2'
