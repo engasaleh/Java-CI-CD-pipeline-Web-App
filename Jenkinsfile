@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    tools {
+        maven 'Maven_3.9.11'   // 👈 Name must match the one you set in "Global Tool Configuration"
+    }
+
     stages {
         stage('Checkout') {
             steps {
@@ -12,6 +16,7 @@ pipeline {
 
         stage('Build') {
             steps {
+                // Jenkins will use the Maven tool defined above
                 sh 'mvn clean package'
             }
         }
