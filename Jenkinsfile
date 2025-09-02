@@ -6,7 +6,7 @@ pipeline {
             steps {
                 git branch: 'main',
                     credentialsId: 'github-creds',
-                    url: 'https://github.com/engasaleh/hello-devops.git'
+                    url: 'https://github.com/<your-username>/hello-java-devops.git'
             }
         }
 
@@ -18,15 +18,15 @@ pipeline {
 
         stage('Docker Build') {
             steps {
-                sh 'docker build -t hello-java-app:v1 .'
+                sh 'docker build -t hello-java-app:latest .'
             }
         }
 
         stage('Docker Push') {
             steps {
                 withDockerRegistry([credentialsId: 'dockerhub-creds', url: '']) {
-                    sh 'docker tag hello-java-app:v1 abdullahsaleh2001/hello-java-app:v2'
-                    sh 'docker push abdullahsaleh2001/hello-java-app:v2'
+                    sh 'docker tag hello-java-app:latest <your-dockerhub-username>/hello-java-app:latest'
+                    sh 'docker push <your-dockerhub-username>/hello-java-app:latest'
                 }
             }
         }
