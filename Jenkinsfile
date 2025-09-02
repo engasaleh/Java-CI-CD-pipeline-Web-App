@@ -1,7 +1,13 @@
 pipeline {
     agent any
 
+    environment {
+        // Make sure Jenkins can talk to your KIND cluster
+        KUBECONFIG = '/var/lib/jenkins/.kube/config'
+    }
+
     stages {
+
         stage('Cleanup') {
             steps {
                 echo 'Cleaning up old workspace and Docker images...'
@@ -36,8 +42,10 @@ pipeline {
         stage('Docker Push') {
             steps {
                 withDockerRegistry([credentialsId: 'dockerhub-creds', url: '']) {
-                    sh 'docker tag web-java-app:v1 abdullahsaleh2001/web-java-app:v2'
-                    sh 'docker push abdullahsaleh2001/web-java-app:v2'
+                    sh '''
+                        docker tag web-java-app:v1 abdullahsaleh2001/web-java-app:v2
+                        docker push abdullahsaleh2001/web-java-app:v2
+                    '''
                 }
             }
         }
@@ -50,6 +58,7 @@ pipeline {
                 '''
             }
         }
+
     }
 }
 
