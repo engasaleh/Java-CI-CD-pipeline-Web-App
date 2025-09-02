@@ -16,7 +16,7 @@ pipeline {
 
         stage('Build') {
             steps {
-                withMaven(maven: 'Maven_3_9') {   // 👈 wrap with withMaven
+                withMaven(maven: 'Maven_3.9.11') {   // 👈 wrap with withMaven
                     sh 'mvn clean package'
                 }
             }
