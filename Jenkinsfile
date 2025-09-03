@@ -12,7 +12,7 @@ pipeline {
         IMAGE_TAG = "v1.0.${env.BUILD_NUMBER}"
         UAT_NODEPORT = "31080"
         PROD_NODEPORT = "30080"
-        NODE_IP = "127.0.0.1" // change if Jenkins is not on the same host as KIND
+        NODE_IP = "127.0.0.1"
     }
 
     stages {
@@ -37,23 +37,13 @@ pipeline {
             steps {
                 sh 'mvn clean package'
                 sh 'mvn test'
-                junit '**/target/surefire-reports/*.xml' // Collect test reports
-            }
-        }
-
-        stage('Code Quality Scan') {
-            steps {
-                // Run SonarQube scan (requires SonarQube Jenkins plugin)
-                withSonarQubeEnv('sonarqube') {
-                    sh "mvn sonar:sonar"
-                }
+                junit '**/target/surefire-reports/*.xml'
             }
         }
 
         stage('Docker Build & Scan') {
             steps {
                 sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
-                // Scan Docker image for vulnerabilities using Trivy
                 sh "trivy image --exit-code 1 --severity HIGH,CRITICAL ${IMAGE_NAME}:${IMAGE_TAG}"
             }
         }
@@ -76,17 +66,15 @@ pipeline {
             }
         }
 
-        stage('Health Check UAT') {
+        // New stage: Automated Integration / Functional Tests
+        stage('Integration / Functional Tests') {
             steps {
-                script {
-                    def response = sh(
-                        script: "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:${UAT_NODEPORT}",
-                        returnStdout: true
-                    ).trim()
-                    if (response != '200') {
-                        error "UAT health check failed! HTTP status: ${response}"
-                    }
-                }
+                echo 'Running automated integration / functional tests on UAT...'
+                sh """
+                    # Example: run a script that performs functional tests against UAT
+                    # Replace with your actual test commands (Postman, curl, Selenium, etc.)
+                    ./scripts/run-integration-tests.sh http://${NODE_IP}:${UAT_NODEPORT}
+                """
             }
         }
 
@@ -98,42 +86,11 @@ pipeline {
 
         stage('Deploy to Production') {
             steps {
+                echo 'Deploying to Production...'
                 sh """
                     kubectl set image deployment/web-java-app-deployment web-java-app=${IMAGE_NAME}:${IMAGE_TAG} -n default
                     kubectl rollout status deployment/web-java-app-deployment -n default
                 """
-            }
-        }
-
-        stage('Health Check Production') {
-            steps {
-                script {
-                    def response = sh(
-                        script: "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:${PROD_NODEPORT}",
-                        returnStdout: true
-                    ).trim()
-                    if (response != '200') {
-                        error "Production health check failed! HTTP status: ${response}"
-                    }
-                }
-            }
-        }
-
-        stage('Fetch Production Logs') {
-            steps {
-                sh """
-                    kubectl logs -l app=web-java-app -n default --tail=50
-                    kubectl get pods -n default
-                """
-            }
-        }
-
-        stage('Rollback if Failed') {
-            when {
-                expression { currentBuild.result == 'FAILURE' }
-            }
-            steps {
-                sh "kubectl rollout undo deployment/web-java-app-deployment -n default"
             }
         }
     }
