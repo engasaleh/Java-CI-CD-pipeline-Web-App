@@ -82,21 +82,5 @@ pipeline {
         }
     }
 
-    post {
-        success {
-            slackSend(
-                channel: '#devops-alerts',
-                color: 'good',
-                message: "SUCCESS: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' deployed successfully."
-            )
-        }
-        failure {
-            slackSend(
-                channel: '#devops-alerts',
-                color: 'danger',
-                message: "FAILURE: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' failed! Check Jenkins logs."
-            )
-        }
-    }
-}
+    
 
