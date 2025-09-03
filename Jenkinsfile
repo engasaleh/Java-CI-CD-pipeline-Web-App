@@ -5,6 +5,9 @@ pipeline {
         KUBECONFIG = '/var/lib/jenkins/.kube/config'
         IMAGE_NAME = 'abdullahsaleh2001/web-java-app'
         IMAGE_TAG = "v1.0.${env.BUILD_NUMBER}"
+        UAT_NODEPORT = "31080"
+        PROD_NODEPORT = "30080"
+        NODE_IP = "127.0.0.1" // change if Jenkins is not on the same host as KIND
     }
 
     stages {
@@ -61,16 +64,13 @@ pipeline {
             steps {
                 script {
                     echo "Checking UAT app..."
-                    // Start port-forward in background
-                    sh "kubectl port-forward svc/web-java-app-service 31080:8080 -n uat &"
-                    // Wait a few seconds for the port-forward to establish
-                    sleep 5
-                    def response = sh(script: "curl -s -o /dev/null -w '%{http_code}' http://localhost:31080", returnStdout: true).trim()
+                    def response = sh(
+                        script: "curl -s -o /dev/null -w '%{http_code}' http://${NODE_IP}:${UAT_NODEPORT}",
+                        returnStdout: true
+                    ).trim()
                     if (response != '200') {
                         error "UAT health check failed! HTTP status: ${response}"
                     }
-                    // Kill all background port-forwards
-                    sh "pkill -f 'kubectl port-forward'"
                 }
             }
         }
@@ -106,13 +106,13 @@ pipeline {
             steps {
                 script {
                     echo "Checking Production app..."
-                    sh "kubectl port-forward svc/web-java-app-service 30080:8080 -n default &"
-                    sleep 5
-                    def response = sh(script: "curl -s -o /dev/null -w '%{http_code}' http://localhost:30080", returnStdout: true).trim()
+                    def response = sh(
+                        script: "curl -s -o /dev/null -w '%{http_code}' http://${NODE_IP}:${PROD_NODEPORT}",
+                        returnStdout: true
+                    ).trim()
                     if (response != '200') {
                         error "Production health check failed! HTTP status: ${response}"
                     }
-                    sh "pkill -f 'kubectl port-forward'"
                 }
             }
         }
