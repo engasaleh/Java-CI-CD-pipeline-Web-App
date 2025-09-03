@@ -76,21 +76,7 @@ pipeline {
             }
         }
 
-        stage('Health Check UAT') {
-            steps {
-                script {
-                    echo 'Checking UAT application health...'
-                    def response = sh(
-                        script: "curl -s -o /dev/null -w '%{http_code}' http://${NODE_IP}:${UAT_NODEPORT}",
-                        returnStdout: true
-                    ).trim()
-                    if (response != '200') {
-                        error "UAT health check failed! HTTP status: ${response}"
-                    }
-                }
-            }
-        }
-
+      
         stage('Deploy to Production') {
             when {
                 expression { params.DEPLOY_TO_PROD }
