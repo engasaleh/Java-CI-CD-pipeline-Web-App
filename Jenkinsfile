@@ -2,9 +2,7 @@ pipeline {
     agent any
 
     options {
-        // Delete all old builds to save space
         buildDiscarder(logRotator(numToKeepStr: '0'))
-        // Optional: Set a maximum runtime for any build
         timeout(time: 1, unit: 'HOURS')
     }
 
@@ -21,11 +19,9 @@ pipeline {
 
         stage('Cleanup') {
             steps {
-                echo 'Cleaning up old workspace and Docker images...'
+                echo 'Cleaning workspace and old Docker images...'
                 deleteDir()
-                sh """
-                    docker rmi -f ${IMAGE_NAME}:${IMAGE_TAG} || true
-                """
+                sh "docker rmi -f ${IMAGE_NAME}:${IMAGE_TAG} || true"
             }
         }
 
@@ -37,15 +33,28 @@ pipeline {
             }
         }
 
-        stage('Build') {
+        stage('Build & Unit Test') {
             steps {
                 sh 'mvn clean package'
+                sh 'mvn test'
+                junit '**/target/surefire-reports/*.xml' // Collect test reports
             }
         }
 
-        stage('Docker Build') {
+        stage('Code Quality Scan') {
+            steps {
+                // Run SonarQube scan (requires SonarQube Jenkins plugin)
+                withSonarQubeEnv('sonarqube') {
+                    sh "mvn sonar:sonar"
+                }
+            }
+        }
+
+        stage('Docker Build & Scan') {
             steps {
                 sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+                // Scan Docker image for vulnerabilities using Trivy
+                sh "trivy image --exit-code 1 --severity HIGH,CRITICAL ${IMAGE_NAME}:${IMAGE_TAG}"
             }
         }
 
@@ -70,26 +79,14 @@ pipeline {
         stage('Health Check UAT') {
             steps {
                 script {
-                    echo "Checking UAT app..."
                     def response = sh(
-                        script: "curl -s -o /dev/null -w '%{http_code}' http://${NODE_IP}:${UAT_NODEPORT}",
+                        script: "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:${UAT_NODEPORT}",
                         returnStdout: true
                     ).trim()
                     if (response != '200') {
                         error "UAT health check failed! HTTP status: ${response}"
                     }
                 }
-            }
-        }
-
-        stage('UAT Pod Logs') {
-            steps {
-                sh """
-                    echo "Fetching UAT pod logs..."
-                    kubectl logs -l app=web-java-app -n uat --tail=20
-                    kubectl get pods -n uat
-                    kubectl get svc -n uat
-                """
             }
         }
 
@@ -101,7 +98,6 @@ pipeline {
 
         stage('Deploy to Production') {
             steps {
-                echo 'Deploying to Production...'
                 sh """
                     kubectl set image deployment/web-java-app-deployment web-java-app=${IMAGE_NAME}:${IMAGE_TAG} -n default
                     kubectl rollout status deployment/web-java-app-deployment -n default
@@ -112,9 +108,8 @@ pipeline {
         stage('Health Check Production') {
             steps {
                 script {
-                    echo "Checking Production app..."
                     def response = sh(
-                        script: "curl -s -o /dev/null -w '%{http_code}' http://${NODE_IP}:${PROD_NODEPORT}",
+                        script: "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:${PROD_NODEPORT}",
                         returnStdout: true
                     ).trim()
                     if (response != '200') {
@@ -124,13 +119,11 @@ pipeline {
             }
         }
 
-        stage('Production Pod Logs') {
+        stage('Fetch Production Logs') {
             steps {
                 sh """
-                    echo "Fetching Production pod logs..."
-                    kubectl logs -l app=web-java-app -n default --tail=20
+                    kubectl logs -l app=web-java-app -n default --tail=50
                     kubectl get pods -n default
-                    kubectl get svc -n default
                 """
             }
         }
@@ -140,7 +133,6 @@ pipeline {
                 expression { currentBuild.result == 'FAILURE' }
             }
             steps {
-                echo "Rolling back to previous stable version..."
                 sh "kubectl rollout undo deployment/web-java-app-deployment -n default"
             }
         }
@@ -151,14 +143,14 @@ pipeline {
             slackSend(
                 channel: '#devops-alerts',
                 color: 'good',
-                message: "SUCCESS: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' deployed successfully to UAT/Production."
+                message: "SUCCESS: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' deployed successfully."
             )
         }
         failure {
             slackSend(
                 channel: '#devops-alerts',
                 color: 'danger',
-                message: "FAILURE: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' failed. Check Jenkins logs."
+                message: "FAILURE: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' failed! Check Jenkins logs."
             )
         }
     }
