@@ -2,12 +2,20 @@ pipeline {
     agent any
 
     environment {
+        // Kubernetes config for Jenkins to talk to KIND or other clusters
         KUBECONFIG = '/var/lib/jenkins/.kube/config'
         IMAGE_NAME = 'abdullahsaleh2001/web-java-app'
         IMAGE_TAG = "v1.0.${env.BUILD_NUMBER}"
         UAT_NODEPORT = "31080"
         PROD_NODEPORT = "30080"
         NODE_IP = "127.0.0.1" // change if Jenkins is not on the same host as KIND
+        SLACK_CHANNEL = '#devops-alerts'
+    }
+
+    options {
+        // Keep last 10 builds and timeout after 1 hour
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        timeout(time: 1, unit: 'HOURS')
     }
 
     stages {
@@ -30,15 +38,34 @@ pipeline {
             }
         }
 
-        stage('Build') {
+        stage('Build & Unit Tests') {
             steps {
+                echo 'Building project and running unit tests...'
                 sh 'mvn clean package'
+                sh 'mvn test'
+            }
+        }
+
+        stage('Static Code Analysis') {
+            steps {
+                echo 'Running SonarQube analysis...'
+                // Assuming SonarQube is configured in Jenkins
+                withSonarQubeEnv('SonarQube') {
+                    sh "mvn sonar:sonar -Dsonar.projectKey=web-java-app -Dsonar.host.url=http://sonarqube:9000 -Dsonar.login=${SONAR_TOKEN}"
+                }
             }
         }
 
         stage('Docker Build') {
             steps {
                 sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+            }
+        }
+
+        stage('Security Scan') {
+            steps {
+                echo 'Scanning Docker image for vulnerabilities...'
+                sh "trivy image --exit-code 1 --severity HIGH,CRITICAL ${IMAGE_NAME}:${IMAGE_TAG}"
             }
         }
 
@@ -54,7 +81,9 @@ pipeline {
             steps {
                 echo 'Deploying to UAT namespace...'
                 sh """
-                    kubectl set image deployment/web-java-app-uat web-java-app=${IMAGE_NAME}:${IMAGE_TAG} -n uat
+                    kubectl apply -f k8s/uat/namespace.yaml || true
+                    kubectl apply -f k8s/uat/deployment.yaml
+                    kubectl apply -f k8s/uat/service.yaml
                     kubectl rollout status deployment/web-java-app-uat -n uat
                 """
             }
@@ -64,6 +93,7 @@ pipeline {
             steps {
                 script {
                     echo "Checking UAT app..."
+                    sleep 5
                     def response = sh(
                         script: "curl -s -o /dev/null -w '%{http_code}' http://${NODE_IP}:${UAT_NODEPORT}",
                         returnStdout: true
@@ -80,8 +110,6 @@ pipeline {
                 sh """
                     echo "Fetching UAT pod logs..."
                     kubectl logs -l app=web-java-app -n uat --tail=20
-                    kubectl get pods -n uat
-                    kubectl get svc -n uat
                 """
             }
         }
@@ -96,7 +124,8 @@ pipeline {
             steps {
                 echo 'Deploying to Production...'
                 sh """
-                    kubectl set image deployment/web-java-app-deployment web-java-app=${IMAGE_NAME}:${IMAGE_TAG} -n default
+                    kubectl apply -f k8s/production/deployment.yaml
+                    kubectl apply -f k8s/production/service.yaml
                     kubectl rollout status deployment/web-java-app-deployment -n default
                 """
             }
@@ -106,6 +135,7 @@ pipeline {
             steps {
                 script {
                     echo "Checking Production app..."
+                    sleep 5
                     def response = sh(
                         script: "curl -s -o /dev/null -w '%{http_code}' http://${NODE_IP}:${PROD_NODEPORT}",
                         returnStdout: true
@@ -122,8 +152,6 @@ pipeline {
                 sh """
                     echo "Fetching Production pod logs..."
                     kubectl logs -l app=web-java-app -n default --tail=20
-                    kubectl get pods -n default
-                    kubectl get svc -n default
                 """
             }
         }
@@ -142,14 +170,14 @@ pipeline {
     post {
         success {
             slackSend(
-                channel: '#devops-alerts',
+                channel: "${SLACK_CHANNEL}",
                 color: 'good',
                 message: "SUCCESS: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' deployed successfully to UAT/Production."
             )
         }
         failure {
             slackSend(
-                channel: '#devops-alerts',
+                channel: "${SLACK_CHANNEL}",
                 color: 'danger',
                 message: "FAILURE: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' failed. Check Jenkins logs."
             )
