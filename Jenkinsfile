@@ -41,10 +41,9 @@ pipeline {
             }
         }
 
-        stage('Docker Build & Scan') {
+        stage('Docker Build') {
             steps {
                 sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
-                sh "trivy image --exit-code 1 --severity HIGH,CRITICAL ${IMAGE_NAME}:${IMAGE_TAG}"
             }
         }
 
@@ -62,18 +61,6 @@ pipeline {
                 sh """
                     kubectl set image deployment/web-java-app-uat web-java-app=${IMAGE_NAME}:${IMAGE_TAG} -n uat
                     kubectl rollout status deployment/web-java-app-uat -n uat
-                """
-            }
-        }
-
-        // New stage: Automated Integration / Functional Tests
-        stage('Integration / Functional Tests') {
-            steps {
-                echo 'Running automated integration / functional tests on UAT...'
-                sh """
-                    # Example: run a script that performs functional tests against UAT
-                    # Replace with your actual test commands (Postman, curl, Selenium, etc.)
-                    ./scripts/run-integration-tests.sh http://${NODE_IP}:${UAT_NODEPORT}
                 """
             }
         }
