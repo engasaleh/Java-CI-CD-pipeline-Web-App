@@ -2,8 +2,16 @@ pipeline {
     agent any
 
     options {
-        buildDiscarder(logRotator(numToKeepStr: '0'))
+        buildDiscarder(logRotator(numToKeepStr: '0')) // لا يحتفظ بأي build قديم
         timeout(time: 1, unit: 'HOURS')
+    }
+
+    parameters {
+        booleanParam(
+            name: 'DEPLOY_TO_PROD',
+            defaultValue: false,
+            description: 'Check to deploy to Production after UAT'
+        )
     }
 
     environment {
@@ -35,6 +43,7 @@ pipeline {
 
         stage('Build & Unit Test') {
             steps {
+                echo 'Building project and running unit tests...'
                 sh 'mvn clean package'
                 sh 'mvn test'
                 junit '**/target/surefire-reports/*.xml'
@@ -43,12 +52,14 @@ pipeline {
 
         stage('Docker Build') {
             steps {
+                echo 'Building Docker image...'
                 sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
             }
         }
 
         stage('Docker Push') {
             steps {
+                echo 'Pushing Docker image to registry...'
                 withDockerRegistry([credentialsId: 'dockerhub-creds', url: '']) {
                     sh "docker push ${IMAGE_NAME}:${IMAGE_TAG}"
                 }
@@ -58,29 +69,40 @@ pipeline {
         stage('Deploy to UAT') {
             steps {
                 echo 'Deploying to UAT namespace...'
-                sh """
-                    kubectl set image deployment/web-java-app-uat web-java-app=${IMAGE_NAME}:${IMAGE_TAG} -n uat
-                    kubectl rollout status deployment/web-java-app-uat -n uat
-                """
+                sh '''
+                    kubectl apply -f deployment/uat/deployment-uat.yaml
+                    kubectl apply -f deployment/uat/service-uat.yaml
+                '''
             }
         }
 
-        stage('Approval to Production') {
+        stage('Health Check UAT') {
             steps {
-                input message: "Approve deployment to Production?"
+                script {
+                    echo 'Checking UAT application health...'
+                    def response = sh(
+                        script: "curl -s -o /dev/null -w '%{http_code}' http://${NODE_IP}:${UAT_NODEPORT}",
+                        returnStdout: true
+                    ).trim()
+                    if (response != '200') {
+                        error "UAT health check failed! HTTP status: ${response}"
+                    }
+                }
             }
         }
 
         stage('Deploy to Production') {
+            when {
+                expression { params.DEPLOY_TO_PROD }
+            }
             steps {
                 echo 'Deploying to Production...'
-                sh """
-                    kubectl set image deployment/web-java-app-deployment web-java-app=${IMAGE_NAME}:${IMAGE_TAG} -n default
-                    kubectl rollout status deployment/web-java-app-deployment -n default
-                """
+                sh '''
+                    kubectl apply -f deployment/production/deployment.yaml
+                    kubectl apply -f deployment/production/service.yaml
+                '''
             }
         }
     }
-
-    
+}
 
