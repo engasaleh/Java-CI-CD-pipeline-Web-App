@@ -36,8 +36,6 @@ The goal of this project is to practice **DevOps end-to-end** using:
 
 ## 📊 CI/CD Pipeline Flow
 
-![Pipeline Diagram](docs/pipeline-flow.png)
-
 1.  Developer pushes code to **GitHub**
 2.  **Jenkins** is triggered → builds + tests + creates Docker image
 3.  Docker image pushed to **DockerHub**
